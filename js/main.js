@@ -103,6 +103,7 @@ var windowmenu=mainmenu.addMenu("Window");
 windowmenu.build=(m)=>{
 	m.add("Default arrangement",()=>arrangeDefault());
 	m.add("Cascade diagrams",()=>cascade());
+	m.add("Tile diagrams",()=>tile());
 	m.add("-");
 	diagramWindows().forEach(w=>m.add(w.title(),()=>w.show(),{checked:()=>w.doc===Fsm.doc}));
 	m.add("-");
@@ -186,6 +187,32 @@ function cascade() {
 		w.show(); w.moveTo(8+j*dx,8+j*dx); w.setSize(ca.w-R-24-k*dx,ca.h-16-k*dx);
 	});
 	const a=activeDiagram(); if (a) a.activate();
+}
+// all diagram windows side by side (and in rows if needed), each one fitted to its window
+function tile() {
+	WM.commitEdit();
+	const ws=diagramWindows(); if (!ws.length) return;
+	const ca=workspace.clientArea, R=sideWidth(), gap=6;
+	const AW=ca.w-R-24, AH=ca.h-16, n=ws.length;
+	// the grid whose cells are the largest (as close to square as possible)
+	let best=null;
+	for (let cols=1;cols<=n;cols++) {
+		const rows=Math.ceil(n/cols);
+		const cw=(AW-(cols-1)*gap)/cols, ch=(AH-(rows-1)*gap)/rows;
+		const score=Math.min(cw,ch);
+		if (!best || score>best.score) best={cols,rows,score};
+	}
+	const {cols,rows}=best;
+	const cw=Math.floor((AW-(cols-1)*gap)/cols), ch=Math.floor((AH-(rows-1)*gap)/rows);
+	ws.forEach((w,i)=>{
+		const r=Math.floor(i/cols), k=i%cols;
+		// the last row is spread over the full width when it is not full
+		const inRow=r===rows-1 ? n-r*cols : cols;
+		const rw=Math.floor((AW-(inRow-1)*gap)/inRow);
+		w.show(); w.moveTo(8+k*(rw+gap),8+r*(ch+gap)); w.setSize(rw,ch);
+	});
+	const a=activeDiagram(); if (a) a.activate();
+	setTimeout(()=>{ ws.forEach(w=>w.view.fit()); invalidate(); },0);
 }
 function arrangeDefault() {
 	const ca=workspace.clientArea, W=ca.w, H=ca.h, R=sideWidth();
