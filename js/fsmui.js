@@ -19,7 +19,7 @@ const FsmCtl = {
 		});
 	},
 	inputText() { return this.win ? this.win.inputField.value : ""; },
-	load(text) {
+	load(text) { if (typeof RandomSim!=="undefined" && RandomSim.on) return false;
 		const d=this.doc; if (!d) return;
 		this.pause(d); WM.commitEdit();
 		d.input=text; Fsm.persist();
@@ -27,8 +27,8 @@ const FsmCtl = {
 		d.sim.addLog("input loaded: "+(d.sim.tokens.length?d.sim.tokens.join(" "):"(empty)"),THEME.textDim);
 		invalidate();
 	},
-	reset() { const d=this.doc; if (!d) return; this.pause(d); d.sim.reset(d.input); d.sim.addLog("reset",THEME.textDim); invalidate(); },
-	step() { WM.commitEdit(); return this.doc ? this.stepDoc(this.doc) : false; },
+	reset() { if (typeof RandomSim!=="undefined" && RandomSim.on) return false; const d=this.doc; if (!d) return; this.pause(d); d.sim.reset(d.input); d.sim.addLog("reset",THEME.textDim); invalidate(); },
+	step() { if (typeof RandomSim!=="undefined" && RandomSim.on) return false; WM.commitEdit(); return this.doc ? this.stepDoc(this.doc) : false; },
 	stepDoc(d) {
 		return Fsm.within(d,()=>{
 			const s=d.sim;
@@ -39,8 +39,8 @@ const FsmCtl = {
 			return ok;
 		});
 	},
-	back() { const d=this.doc; if (!d) return; this.pause(d); d.sim.back(); invalidate(); },
-	run() {
+	back() { if (typeof RandomSim!=="undefined" && RandomSim.on) return false; const d=this.doc; if (!d) return; this.pause(d); d.sim.back(); invalidate(); },
+	run() { if (typeof RandomSim!=="undefined" && RandomSim.on) return false;
 		const d=this.doc; if (!d) return;
 		if (d.running) { this.pause(d); return; }
 		if (d.sim.next()===null || d.sim.isFinal()) d.sim.reset(d.input);
@@ -54,7 +54,7 @@ const FsmCtl = {
 	},
 	faster() { this.delay=Math.max(80,Math.round(this.delay/1.5)); invalidate(); },
 	slower() { this.delay=Math.min(4000,Math.round(this.delay*1.5)); invalidate(); },
-	manual(ev) { const d=this.doc; if (!d) return; this.pause(d); WM.commitEdit(); d.sim.manual(ev); invalidate(); },
+	manual(ev) { if (typeof RandomSim!=="undefined" && RandomSim.on) return false; const d=this.doc; if (!d) return; this.pause(d); WM.commitEdit(); d.sim.manual(ev); invalidate(); },
 	// a token runs along the arrow that fired (in the window of that machine)
 	animate(doc,t) {
 		const v=doc.view; if (!v || !v.treeVisible()) return;
@@ -140,7 +140,7 @@ class EventBar extends Area {
 		let x=0, y=0;
 		alpha.forEach(ev=>{
 			const b=new Button(ev,0,0,0,24,()=>FsmCtl.manual(ev),{
-				enabled:()=>!!FsmCtl.sim && FsmCtl.inputText().trim()==="" && !FsmCtl.sim.isFinal() && !(WM.editing && WM.editing.owner===FsmCtl.win.inputField),
+				enabled:()=>!!FsmCtl.sim && !(typeof RandomSim!=="undefined" && RandomSim.on) && FsmCtl.inputText().trim()==="" && !FsmCtl.sim.isFinal() && !(WM.editing && WM.editing.owner===FsmCtl.win.inputField),
 				toggled:()=>b.isEnabled() && FsmCtl.sim.possible(ev),
 				tooltip:"fire '"+ev+"'  (only when the input box is empty)",
 			});
@@ -167,7 +167,14 @@ class SimWindow extends Window {
 		}));
 		this.loadBtn=this.push(new Button("Load",0,6,56,24,()=>{ WM.commitEdit(); FsmCtl.load(this.inputField.value); },{tooltip:"Load the input and reset"}));
 		this.tape=this.push(new TapeView());
-		const b=(cap,fn,tip,opts={})=>this.push(new Button(cap,0,0,0,24,fn,Object.assign({tooltip:tip},opts)));
+		// while the random simulation runs these buttons are off (Slower / Faster still work)
+		const free=()=>!(typeof RandomSim!=="undefined" && RandomSim.on);
+		const b=(cap,fn,tip,opts={})=>{
+			const en=opts.enabled, speed=cap==="Slower"||cap==="Faster";
+			const o=Object.assign({tooltip:tip},opts);
+			if (!speed) o.enabled=()=>free() && (en?en():true);
+			return this.push(new Button(cap,0,0,0,24,fn,o));
+		};
 		this.btns=[
 			b("Reset",()=>FsmCtl.reset(),"Back to the initial state (F9)"),
 			b("◀ Back",()=>FsmCtl.back(),"Undo the last step (Shift+F10)",{enabled:()=>!!FsmCtl.sim && FsmCtl.sim.history.length>0}),

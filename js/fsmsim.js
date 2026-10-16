@@ -11,6 +11,7 @@ class FsmSim {
 	constructor() {
 		this.listeners=[];
 		this.ignoreUnhandled=false;   // false: automaton semantics (reject), true: reactive (ignore)
+		this.quietEnd=false;          // random simulation: no ACCEPTED / REJECTED line after every step
 		this.reset("");
 	}
 	on(f) { this.listeners.push(f); }
@@ -137,8 +138,8 @@ class FsmSim {
 		if (Object.keys(this.vars).length) line+="     "+Object.keys(this.vars).map(k=>k+"="+Expr.toText(this.vars[k])).join(", ");
 		this.addLog(line,"#1f4f8a");
 		if (en.length>1) this.addLog("  nondeterministic: "+en.length+" transitions enabled, the first one fired","#a05a00");
-		if (this.status==="accepted") this.addLog("end of input: ACCEPTED ("+this.stateLabel(this.state)+" is accepting)","#2c6e2c");
-		if (this.status==="rejected") this.addLog("end of input: REJECTED ("+this.stateLabel(this.state)+" is not accepting)","#c01818");
+		if (this.status==="accepted" && !this.quietEnd) this.addLog("end of input: ACCEPTED ("+this.stateLabel(this.state)+" is accepting)","#2c6e2c");
+		if (this.status==="rejected" && !this.quietEnd) this.addLog("end of input: REJECTED ("+this.stateLabel(this.state)+" is not accepting)","#c01818");
 		this.emit({type:"fire",trans:t,from,to:t.to,event:ev});
 		return true;
 	}

@@ -96,6 +96,8 @@ simmenu.add("Run / Pause",()=>FsmCtl.run(),{key:"F8",checked:()=>FsmCtl.running}
 simmenu.add("Slower",()=>FsmCtl.slower());
 simmenu.add("Faster",()=>FsmCtl.faster());
 simmenu.add("-");
+simmenu.add("Random simulation",()=>RandomSim.start(),{checked:()=>RandomSim.on});
+simmenu.add("-");
 simmenu.add("Unhandled event rejects the input (automaton)",()=>{ if (FsmCtl.sim) FsmCtl.sim.ignoreUnhandled=false; },{checked:()=>!!FsmCtl.sim && !FsmCtl.sim.ignoreUnhandled});
 simmenu.add("Unhandled event is ignored (reactive system)",()=>{ if (FsmCtl.sim) FsmCtl.sim.ignoreUnhandled=true; },{checked:()=>!!FsmCtl.sim && FsmCtl.sim.ignoreUnhandled});
 
@@ -135,6 +137,8 @@ helpmenu.add("Usage…",()=>WM.message("Usage",[
 	"  type the input (coin push push  or  0110) and press Enter",
 	"  F10 step, Shift+F10 back, F8 run, F9 reset",
 	"  with an empty input box the event buttons fire events directly",
+	"  Simulation / Random simulation: every open machine takes randomly chosen",
+	"     possible events (guards are checked); a dead end restarts it",
 ].join("\n"),600));
 helpmenu.add("About…",()=>WM.message("About","FSM Design Tool\nFinite state machine editor and simulator\non the canvas window system of the SDL tool.\n\n2026 Peter Csurgay"));
 
