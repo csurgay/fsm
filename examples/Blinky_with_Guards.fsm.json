@@ -1,0 +1,110 @@
+{
+ "format": "fsm-tool/1",
+ "name": "Blinky with Guards",
+ "vars": "prev:=\"\"",
+ "states": [
+  {
+   "id": "s19",
+   "label": "CHASING",
+   "x": 495,
+   "y": 150,
+   "accepting": false
+  },
+  {
+   "id": "s22",
+   "label": "DEAD",
+   "x": 333,
+   "y": 429,
+   "accepting": false
+  },
+  {
+   "id": "s28",
+   "label": "SCATTER",
+   "x": 165,
+   "y": 153,
+   "accepting": false
+  },
+  {
+   "id": "s30",
+   "label": "EVADING",
+   "x": 330,
+   "y": 309,
+   "accepting": false
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t29",
+   "from": "s28",
+   "to": "s19",
+   "event": "TIMER",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t31",
+   "from": "s28",
+   "to": "s30",
+   "event": "PELLET",
+   "guard": "",
+   "action": "prev:=\"SCATTER\"",
+   "bend": 50,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t32",
+   "from": "s30",
+   "to": "s28",
+   "event": "TIMEOUT",
+   "guard": "prev==\"SCATTER\"",
+   "action": "",
+   "bend": 36,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t33",
+   "from": "s30",
+   "to": "s22",
+   "event": "COLLISION",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t36",
+   "from": "s22",
+   "to": "s28",
+   "event": "ARRIVE_HOME",
+   "guard": "",
+   "action": "",
+   "bend": -165,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t37",
+   "from": "s19",
+   "to": "s30",
+   "event": "PELLET",
+   "guard": "",
+   "action": "prev:=\"CHASING\"",
+   "bend": -53,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t38",
+   "from": "s30",
+   "to": "s19",
+   "event": "TIMEOUT",
+   "guard": "prev==\"CHASING\"",
+   "action": "",
+   "bend": -11,
+   "loopAngle": -1.5707963267948966
+  }
+ ],
+ "initAngle": 3.141592653589793,
+ "initial": "s28",
+ "input": ""
+}

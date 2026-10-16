@@ -1,0 +1,127 @@
+{
+ "format": "fsm-tool/1",
+ "name": "Blinky without Guards",
+ "vars": "",
+ "states": [
+  {
+   "id": "s19",
+   "label": "CHASING",
+   "x": 495,
+   "y": 150,
+   "accepting": false
+  },
+  {
+   "id": "s20",
+   "label": "EVADING_CHASING",
+   "x": 437,
+   "y": 314,
+   "accepting": false
+  },
+  {
+   "id": "s22",
+   "label": "DEAD",
+   "x": 346,
+   "y": 433,
+   "accepting": false
+  },
+  {
+   "id": "s28",
+   "label": "SCATTER",
+   "x": 165,
+   "y": 153,
+   "accepting": false
+  },
+  {
+   "id": "s30",
+   "label": "EVADING_SCATTER",
+   "x": 245,
+   "y": 316,
+   "accepting": false
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t21",
+   "from": "s19",
+   "to": "s20",
+   "event": "PELLET",
+   "guard": "",
+   "action": "",
+   "bend": 34,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t23",
+   "from": "s20",
+   "to": "s22",
+   "event": "COLLISION",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t25",
+   "from": "s20",
+   "to": "s19",
+   "event": "TIMEOUT",
+   "guard": "",
+   "action": "",
+   "bend": 33,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t29",
+   "from": "s28",
+   "to": "s19",
+   "event": "TIMER",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t31",
+   "from": "s28",
+   "to": "s30",
+   "event": "PELLET",
+   "guard": "",
+   "action": "",
+   "bend": 50,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t32",
+   "from": "s30",
+   "to": "s28",
+   "event": "TIMEOUT",
+   "guard": "",
+   "action": "",
+   "bend": 31,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t33",
+   "from": "s30",
+   "to": "s22",
+   "event": "COLLISION",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t36",
+   "from": "s22",
+   "to": "s28",
+   "event": "ARRIVE_HOME",
+   "guard": "",
+   "action": "",
+   "bend": -165,
+   "loopAngle": -1.5707963267948966
+  }
+ ],
+ "initAngle": 3.141592653589793,
+ "initial": "s28",
+ "input": ""
+}

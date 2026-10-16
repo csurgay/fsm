@@ -1,0 +1,93 @@
+{
+ "format": "fsm-tool/1",
+ "name": "Binary numbers divisible by 3",
+ "vars": "",
+ "initAngle": 3.141592653589793,
+ "states": [
+  {
+   "id": "s1",
+   "label": "r0",
+   "x": 180,
+   "y": 240,
+   "accepting": true
+  },
+  {
+   "id": "s2",
+   "label": "r1",
+   "x": 400,
+   "y": 240,
+   "accepting": false
+  },
+  {
+   "id": "s3",
+   "label": "r2",
+   "x": 620,
+   "y": 240,
+   "accepting": false
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t1",
+   "from": "s1",
+   "to": "s1",
+   "event": "0",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t2",
+   "from": "s1",
+   "to": "s2",
+   "event": "1",
+   "guard": "",
+   "action": "",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t3",
+   "from": "s2",
+   "to": "s1",
+   "event": "1",
+   "guard": "",
+   "action": "",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t4",
+   "from": "s2",
+   "to": "s3",
+   "event": "0",
+   "guard": "",
+   "action": "",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t5",
+   "from": "s3",
+   "to": "s2",
+   "event": "0",
+   "guard": "",
+   "action": "",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t6",
+   "from": "s3",
+   "to": "s3",
+   "event": "1",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  }
+ ],
+ "initial": "s1",
+ "input": "110"
+}

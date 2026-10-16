@@ -37,7 +37,8 @@ class FsmView extends Area {
 		this.connect=null;        // {from, p, target}
 		this.initDrag=null;       // {p, target}
 		this.onSelect=null;
-		this.highlight=()=>({});  // simulation: {active, lastTrans, nextTrans, stuck}
+		this.doc=null;            // the machine shown in this view
+		this.highlight=()=>(this.doc?FsmCtl.highlight(this.doc):{});  // simulation: {active, lastTrans, nextTrans, stuck}
 	}
 	/* ---------------- geometry (diagram coordinates) ---------------- */
 	size(s) {
@@ -128,7 +129,8 @@ class FsmView extends Area {
 	stateAt(p) { const f=Fsm.fsm; for (let i=f.states.length-1;i>=0;i--) if (this.ellipseDist(f.states[i],p)<=1.12) return f.states[i]; return null; }
 
 	/* ---------------- painting ---------------- */
-	paint() {
+	paint() { Fsm.within(this.doc,()=>this.paintMachine()); }
+	paintMachine() {
 		c.fillRect(this.ax,this.ay,this.w,this.h,"#ffffff");
 		// light dot grid
 		const step=20*this.z;
@@ -243,7 +245,8 @@ class FsmView extends Area {
 		try { return Fsm.edit(label,fn); }
 		catch(e) { WM.message("Error",e.message); return false; }
 	}
-	processEvent(pevt) {
+	processEvent(pevt) { return Fsm.within(this.doc,()=>this.processMachineEvent(pevt)); }
+	processMachineEvent(pevt) {
 		if (pevt.type===e_wheel) {
 			if (pevt.ctrl) this.zoomAt(pevt.x,pevt.y,pevt.deltaY<0?1.1:1/1.1);
 			else if (pevt.shift) { this.ox-=pevt.deltaY; invalidate(); }
@@ -415,7 +418,8 @@ class FsmView extends Area {
 		}
 		popupMenu(items,pevt.x,pevt.y);
 	}
-	onKey(k) {
+	onKey(k) { return Fsm.within(this.doc,()=>this.onMachineKey(k)); }
+	onMachineKey(k) {
 		const o=this.selected();
 		if ((k.key==="Delete"||k.key==="Backspace") && o) { this.deleteSelected(); return true; }
 		if ((k.key==="F2"||k.key==="Enter") && o) { this.editLabel(o); return true; }
@@ -443,7 +447,7 @@ class FsmView extends Area {
 		return {x0,y0,x1,y1};
 	}
 	fit() {
-		const b=this.bounds(); if (!b) { this.z=1; this.ox=0; this.oy=0; invalidate(); return; }
+		const b=Fsm.within(this.doc,()=>this.bounds()); if (!b) { this.z=1; this.ox=0; this.oy=0; invalidate(); return; }
 		const m=40, w=b.x1-b.x0+2*m, h=b.y1-b.y0+2*m;
 		this.z=Math.max(0.3,Math.min(1.6,Math.min(this.w/w,this.h/h)));
 		this.ox=(this.w-(b.x1+b.x0)*this.z)/2; this.oy=(this.h-(b.y1+b.y0)*this.z)/2;
@@ -451,13 +455,24 @@ class FsmView extends Area {
 	}
 }
 
+// one diagram window per open machine; activating it makes its machine the
+// one the Simulation and Properties windows work on
 class DiagramWindow extends Window {
-	constructor(prect) {
-		super("",prect,CLOSABLE,RESIZABLE,{minW:240,minH:160});
+	constructor(prect,doc) {
+		super("",prect,CLOSABLE,RESIZABLE,{minW:240,minH:160,closeAction:"destroy"});
 		this.class="DiagramWindow";
-		this.title=()=>"State diagram – "+(Fsm.fsm?Fsm.fsm.name:"");
+		this.doc=doc;
+		doc.win=this;
+		this.title=()=>"State diagram – "+(doc.fsm?doc.fsm.name:"");
 		this.view=this.push(new FsmView());
+		this.view.doc=doc;
+		doc.view=this.view;
+		this.onClose=()=>{ if (this.beforeClose) return this.beforeClose(); return true; };
 		this.layout();
+	}
+	activate() {
+		super.activate();
+		if (this.onActivate) this.onActivate(this.doc);
 	}
 	onKey(k) { return this.view.onKey(k); }
 }

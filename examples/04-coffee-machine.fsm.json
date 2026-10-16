@@ -1,0 +1,93 @@
+{
+ "format": "fsm-tool/1",
+ "name": "Coffee machine (guards)",
+ "vars": "credit := 0",
+ "initAngle": 3.141592653589793,
+ "states": [
+  {
+   "id": "s1",
+   "label": "Idle",
+   "x": 180,
+   "y": 250,
+   "accepting": false
+  },
+  {
+   "id": "s2",
+   "label": "Paying",
+   "x": 460,
+   "y": 250,
+   "accepting": false
+  },
+  {
+   "id": "s3",
+   "label": "Brewing",
+   "x": 740,
+   "y": 250,
+   "accepting": false
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t1",
+   "from": "s1",
+   "to": "s2",
+   "event": "coin",
+   "guard": "",
+   "action": "credit := credit + 100",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t2",
+   "from": "s2",
+   "to": "s2",
+   "event": "coin",
+   "guard": "",
+   "action": "credit := credit + 100",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t3",
+   "from": "s2",
+   "to": "s3",
+   "event": "button",
+   "guard": "credit >= 200",
+   "action": "credit := credit - 200",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t4",
+   "from": "s2",
+   "to": "s2",
+   "event": "button",
+   "guard": "credit < 200",
+   "action": "",
+   "bend": 0,
+   "loopAngle": 1.5707963267948966
+  },
+  {
+   "id": "t5",
+   "from": "s3",
+   "to": "s2",
+   "event": "done",
+   "guard": "credit > 0",
+   "action": "",
+   "bend": 35,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t6",
+   "from": "s3",
+   "to": "s1",
+   "event": "done",
+   "guard": "credit = 0",
+   "action": "",
+   "bend": -110,
+   "loopAngle": -1.5707963267948966
+  }
+ ],
+ "initial": "s1",
+ "input": ""
+}

@@ -17,6 +17,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - name: List the examples (examples/index.json)
+        run: node tools/examples-index.js
+
       - name: Test deployment configuration
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
@@ -28,7 +31,7 @@ jobs:
           security: strict
           local-dir: ./
           server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          dry-run: true
+          dry-run: false
           dangerous-clean-slate: false
           exclude: |
             **/.git*

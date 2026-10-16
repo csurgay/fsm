@@ -1,63 +1,86 @@
 // FSM Tool - simulation window (input, tape, stepping, event buttons) and properties window
 "use strict";
 
+// FsmCtl always works on the active machine (Fsm.doc); a running simulation keeps
+// running in the background when another diagram window becomes active.
 const FsmCtl = {
-	sim:new FsmSim(),
-	running:false,
 	delay:700,
-	loopTimer:null,
-	view:null, win:null,
-	init() {
-		this.sim.on((ev)=>{ if (ev.type==="fire") this.animate(ev.trans); invalidate(); });
+	win:null,         // the Simulation window
+	get doc() { return Fsm.doc; },
+	get sim() { return Fsm.doc ? Fsm.doc.sim : null; },
+	get view() { return Fsm.doc ? Fsm.doc.view : null; },
+	get running() { return !!(Fsm.doc && Fsm.doc.running); },
+	// a new machine gets its own simulator
+	attach(doc) {
+		Fsm.within(doc,()=>{
+			doc.sim=new FsmSim();
+			doc.sim.on((ev)=>{ if (ev.type==="fire") this.animate(doc,ev.trans); invalidate(); });
+			doc.sim.reset(doc.input);
+		});
 	},
 	inputText() { return this.win ? this.win.inputField.value : ""; },
-	load(text) { this.pause(); WM.commitEdit(); this.sim.reset(text); this.sim.addLog("input loaded: "+(this.sim.tokens.length?this.sim.tokens.join(" "):"(empty)"),THEME.textDim); invalidate(); },
-	reset() { this.pause(); this.sim.reset(this.inputText()); this.sim.addLog("reset",THEME.textDim); invalidate(); },
-	step() {
-		WM.commitEdit();
-		if (this.sim.isFinal()) { this.pause(); return false; }
-		if (this.sim.next()===null) { this.pause(); if (!this.sim.tokens.length) this.sim.addLog("the input is empty – type a sequence or use the event buttons",THEME.textDim); invalidate(); return false; }
-		const ok=this.sim.step();
+	load(text) {
+		const d=this.doc; if (!d) return;
+		this.pause(d); WM.commitEdit();
+		d.input=text; Fsm.persist();
+		d.sim.reset(text);
+		d.sim.addLog("input loaded: "+(d.sim.tokens.length?d.sim.tokens.join(" "):"(empty)"),THEME.textDim);
 		invalidate();
-		return ok;
 	},
-	back() { this.pause(); this.sim.back(); invalidate(); },
+	reset() { const d=this.doc; if (!d) return; this.pause(d); d.sim.reset(d.input); d.sim.addLog("reset",THEME.textDim); invalidate(); },
+	step() { WM.commitEdit(); return this.doc ? this.stepDoc(this.doc) : false; },
+	stepDoc(d) {
+		return Fsm.within(d,()=>{
+			const s=d.sim;
+			if (s.isFinal()) { this.pause(d); return false; }
+			if (s.next()===null) { this.pause(d); if (!s.tokens.length) s.addLog("the input is empty – type a sequence or use the event buttons",THEME.textDim); invalidate(); return false; }
+			const ok=s.step();
+			invalidate();
+			return ok;
+		});
+	},
+	back() { const d=this.doc; if (!d) return; this.pause(d); d.sim.back(); invalidate(); },
 	run() {
-		if (this.running) { this.pause(); return; }
-		if (this.sim.next()===null || this.sim.isFinal()) { this.sim.reset(this.inputText()); }
-		this.running=true; this.loop(); invalidate();
+		const d=this.doc; if (!d) return;
+		if (d.running) { this.pause(d); return; }
+		if (d.sim.next()===null || d.sim.isFinal()) d.sim.reset(d.input);
+		d.running=true; this.loop(d); invalidate();
 	},
-	pause() { this.running=false; clearTimeout(this.loopTimer); invalidate(); },
-	loop() {
-		if (!this.running) return;
-		if (!this.step()) { this.pause(); return; }
-		this.loopTimer=setTimeout(()=>this.loop(),this.delay);
+	pause(d=this.doc) { if (!d) return; d.running=false; clearTimeout(d.timer); invalidate(); },
+	loop(d) {
+		if (!d.running || !Fsm.docs.includes(d)) return;
+		if (!this.stepDoc(d)) { this.pause(d); return; }
+		d.timer=setTimeout(()=>this.loop(d),this.delay);
 	},
 	faster() { this.delay=Math.max(80,Math.round(this.delay/1.5)); invalidate(); },
 	slower() { this.delay=Math.min(4000,Math.round(this.delay*1.5)); invalidate(); },
-	manual(ev) { this.pause(); WM.commitEdit(); this.sim.manual(ev); invalidate(); },
-	// a token runs along the arrow that fired
-	animate(t) {
-		const v=this.view; if (!v || !v.treeVisible()) return;
+	manual(ev) { const d=this.doc; if (!d) return; this.pause(d); WM.commitEdit(); d.sim.manual(ev); invalidate(); },
+	// a token runs along the arrow that fired (in the window of that machine)
+	animate(doc,t) {
+		const v=doc.view; if (!v || !v.treeVisible()) return;
 		const g=v.geom(t); if (!g) return;
 		const dur=Math.max(150,Math.min(700,this.delay*0.7));
 		WM.animations.push({ t0:performance.now(), dur, paint:(k)=>{
+			if (!v.treeVisible()) return;
 			const e=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
 			const p=v.toScreen(cubicAt(g,e));
 			v.absolute();
 			if (p.x<v.ax||p.y<v.ay||p.x>v.ax+v.w||p.y>v.ay+v.h) return;
+			// do not paint over windows that cover this diagram
+			if (WM.root.hit(p.x,p.y)!==v) return;
 			ctx.save();
 			ctx.beginPath(); ctx.arc(p.x,p.y,7*Math.max(0.7,v.z),0,Math.PI*2);
 			ctx.fillStyle="#ffb300"; ctx.fill(); ctx.strokeStyle="#8a5a00"; ctx.lineWidth=1.5; ctx.stroke();
 			ctx.restore();
 		}});
 	},
-	highlight() {
-		const s=this.sim, nt=s.nextTransition();
+	highlight(doc) {
+		const s=doc.sim; if (!s) return {};
+		const nt=s.nextTransition();
 		return { active:s.state, lastTrans:s.lastTrans, nextTrans:nt?nt.id:null, stuck:s.isFinal(), accepted:s.status==="accepted" };
 	},
 	statusText() {
-		const s=this.sim;
+		const s=this.sim; if (!s) return "no machine";
 		const st={ ready:"ready", running:"running", done:"end of input", accepted:"ACCEPTED", rejected:"REJECTED", stuck:"STUCK – rejected", error:"ERROR" }[s.status]||s.status;
 		return "State: "+(s.state?s.stateLabel(s.state):"-")+"      "+st+(this.running?"   ▶":"")+"      step "+s.pos+"/"+s.tokens.length;
 	},
@@ -71,6 +94,7 @@ class TapeView extends Area {
 	paint() {
 		const s=FsmCtl.sim;
 		c.fillRect(this.ax,this.ay,this.w,this.h,"#ffffff");
+		if (!s) return;
 		c.rect(this.ax+0.5,this.ay+0.5,this.w-1,this.h-1,"#b5bcc5");
 		if (!s.tokens.length) {
 			c.fillText("(empty input – type a sequence above, or use the event buttons)",this.ax+10,this.ay+this.h/2,"left",THEME.textDim);
@@ -116,7 +140,7 @@ class EventBar extends Area {
 		let x=0, y=0;
 		alpha.forEach(ev=>{
 			const b=new Button(ev,0,0,0,24,()=>FsmCtl.manual(ev),{
-				enabled:()=>FsmCtl.inputText().trim()==="" && !FsmCtl.sim.isFinal() && !(WM.editing && WM.editing.owner===FsmCtl.win.inputField),
+				enabled:()=>!!FsmCtl.sim && FsmCtl.inputText().trim()==="" && !FsmCtl.sim.isFinal() && !(WM.editing && WM.editing.owner===FsmCtl.win.inputField),
 				toggled:()=>b.isEnabled() && FsmCtl.sim.possible(ev),
 				tooltip:"fire '"+ev+"'  (only when the input box is empty)",
 			});
@@ -135,6 +159,7 @@ class SimWindow extends Window {
 	constructor(prect) {
 		super("Simulation",prect,CLOSABLE,RESIZABLE,{minW:340,minH:260});
 		this.class="SimWindow";
+		this.title=()=>"Simulation – "+(Fsm.fsm?Fsm.fsm.name:"no machine");
 		this.push(new Label("Input:",8,8,48,22,{font:THEME.fontBold}));
 		this.inputField=this.push(new TextField("",58,6,200,24,{
 			placeholder:"events, e.g.  coin push push   or   0110",
@@ -145,17 +170,17 @@ class SimWindow extends Window {
 		const b=(cap,fn,tip,opts={})=>this.push(new Button(cap,0,0,0,24,fn,Object.assign({tooltip:tip},opts)));
 		this.btns=[
 			b("Reset",()=>FsmCtl.reset(),"Back to the initial state (F9)"),
-			b("◀ Back",()=>FsmCtl.back(),"Undo the last step (Shift+F10)",{enabled:()=>FsmCtl.sim.history.length>0}),
-			b("Step ▶",()=>FsmCtl.step(),"Take the next input symbol (F10)",{enabled:()=>FsmCtl.sim.next()!==null && !FsmCtl.sim.isFinal()}),
+			b("◀ Back",()=>FsmCtl.back(),"Undo the last step (Shift+F10)",{enabled:()=>!!FsmCtl.sim && FsmCtl.sim.history.length>0}),
+			b("Step ▶",()=>FsmCtl.step(),"Take the next input symbol (F10)",{enabled:()=>!!FsmCtl.sim && FsmCtl.sim.next()!==null && !FsmCtl.sim.isFinal()}),
 			b("Run",()=>FsmCtl.run(),"Run / pause (F8)",{toggled:()=>FsmCtl.running}),
 			b("Slower",()=>FsmCtl.slower(),"Longer delay"),
 			b("Faster",()=>FsmCtl.faster(),"Shorter delay"),
 		];
 		this.status=this.push(new Label(()=>FsmCtl.statusText(),8,0,300,20,{font:THEME.fontBold}));
-		this.varsLabel=this.push(new Label(()=>{ const v=FsmCtl.sim.vars, k=Object.keys(v); return k.length?"Variables:  "+k.map(n=>n+" = "+Expr.toText(v[n])).join(",   "):(FsmCtl.sim.msg||""); },8,0,300,18,{font:THEME.fontMono}));
+		this.varsLabel=this.push(new Label(()=>{ if (!FsmCtl.sim) return ""; const v=FsmCtl.sim.vars, k=Object.keys(v); return k.length?"Variables:  "+k.map(n=>n+" = "+Expr.toText(v[n])).join(",   "):(FsmCtl.sim.msg||""); },8,0,300,18,{font:THEME.fontMono}));
 		this.evLabel=this.push(new Label("Events:",8,0,56,24,{font:THEME.fontBold}));
 		this.events=this.push(new EventBar());
-		this.logView=this.push(new ListView(0,0,10,10,{ items:()=>FsmCtl.sim.log, stickBottom:true, font:THEME.fontSmall, rowH:16 }));
+		this.logView=this.push(new ListView(0,0,10,10,{ items:()=>FsmCtl.sim?FsmCtl.sim.log:[], stickBottom:true, font:THEME.fontSmall, rowH:16 }));
 		this.layout();
 	}
 	onLayout() {
@@ -194,12 +219,14 @@ class PropsWindow extends Window {
 	}
 	selKey() {
 		const v=FsmCtl.view, s=v&&v.sel;
-		if (!s || s.kind==="init") return "machine";
-		if (!v.selected()) return "machine";
-		return s.kind+":"+s.id;
+		if (!Fsm.doc) return "none";
+		const d=Fsm.doc.id+"|";
+		if (!s || s.kind==="init") return d+"machine";
+		if (!v.selected()) return d+"machine";
+		return d+s.kind+":"+s.id;
 	}
 	rebuild() {
-		const key=this.selKey();
+		let key=this.selKey();
 		if (key===this.key && this.builtW===this.clientArea.w) return;
 		this.key=key; this.builtW=this.clientArea.w;
 		const ca=this.clientArea;
@@ -217,6 +244,8 @@ class PropsWindow extends Window {
 		const hint=(t,color=THEME.textDim)=>{ this.push(new Label(t,8,y,W-16,16,{font:THEME.fontSmall,color})); y+=16; };
 		const buttons=(list)=>{ let x=8; list.forEach(([cap,fn,opts])=>{ const bt=this.push(new Button(cap,x,y,0,24,fn,opts||{})); x+=bt.w+4; }); y+=32; };
 		const view=FsmCtl.view;
+		key=key.replace(/^[^|]*\|/,"");
+		if (key==="none") title("No machine open");
 		if (key==="machine") {
 			title("Machine");
 			field("Name:",()=>Fsm.fsm.name,(v)=>{ Fsm.fsm.name=v.trim()||"Untitled"; });

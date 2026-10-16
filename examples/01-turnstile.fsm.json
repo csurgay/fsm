@@ -1,0 +1,66 @@
+{
+ "format": "fsm-tool/1",
+ "name": "Turnstile (coin / push)",
+ "vars": "",
+ "initAngle": 3.141592653589793,
+ "states": [
+  {
+   "id": "s1",
+   "label": "Locked",
+   "x": 220,
+   "y": 220,
+   "accepting": false
+  },
+  {
+   "id": "s2",
+   "label": "Unlocked",
+   "x": 520,
+   "y": 220,
+   "accepting": false
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t1",
+   "from": "s1",
+   "to": "s2",
+   "event": "coin",
+   "guard": "",
+   "action": "",
+   "bend": 40,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t2",
+   "from": "s2",
+   "to": "s1",
+   "event": "push",
+   "guard": "",
+   "action": "",
+   "bend": 40,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t3",
+   "from": "s1",
+   "to": "s1",
+   "event": "push",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  },
+  {
+   "id": "t4",
+   "from": "s2",
+   "to": "s2",
+   "event": "coin",
+   "guard": "",
+   "action": "",
+   "bend": 0,
+   "loopAngle": -1.5707963267948966
+  }
+ ],
+ "initial": "s1",
+ "input": "coin push push coin coin push"
+}

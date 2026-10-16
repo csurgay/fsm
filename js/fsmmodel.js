@@ -10,13 +10,59 @@
 // guard: boolean expression over the variables (expr.js), action: statements "x := e; y++"
 "use strict";
 
+// Several machines can be open at the same time. Each one is a "doc":
+//   doc = { id, fsm, undoStack, redoStack, input, sim, view, win, running, timer }
+// Fsm.doc is the current doc: Fsm.fsm, Fsm.undoStack ... always refer to it.
+// Fsm.within(doc, fn) runs fn with another doc as the current one (painting an
+// inactive window, a simulation running in the background).
 const Fsm = {
-	fsm:null,
+	docs:[],
+	doc:null,
 	version:0,
 	listeners:[],
-	undoStack:[], redoStack:[],
 	nextId:1,
+	nextDocId:1,
+	get fsm() { return this.doc ? this.doc.fsm : null; },
+	set fsm(f) { this.doc.fsm=f; },
+	get undoStack() { return this.doc ? this.doc.undoStack : []; },
+	set undoStack(a) { this.doc.undoStack=a; },
+	get redoStack() { return this.doc ? this.doc.redoStack : []; },
+	set redoStack(a) { this.doc.redoStack=a; },
 	uid(prefix="t") { return prefix+(this.nextId++); },
+
+	newDoc(f,input="") {
+		const doc={ id:"d"+(this.nextDocId++), fsm:f, undoStack:[], redoStack:[], input:input||"", sim:null, view:null, win:null, running:false, timer:null };
+		this.normalize(f);
+		this.docs.push(doc);
+		return doc;
+	},
+	closeDoc(doc) {
+		this.docs=this.docs.filter(d=>d!==doc);
+		if (this.doc===doc) this.doc=this.docs[this.docs.length-1]||null;
+		this.persist();
+	},
+	within(doc,fn) {
+		if (!doc || doc===this.doc) return fn();
+		const prev=this.doc;
+		this.doc=doc;
+		try { return fn(); } finally { this.doc=prev; }
+	},
+	// all open machines (and their inputs) survive a page reload
+	persist() {
+		try {
+			localStorage.setItem("fsm-tool-docs",JSON.stringify(this.docs.map(d=>({ fsm:d.fsm, input:d.input }))));
+			localStorage.setItem("fsm-tool-active",String(Math.max(0,this.docs.indexOf(this.doc))));
+		} catch(e) {}
+	},
+	restore() {
+		try {
+			const s=localStorage.getItem("fsm-tool-docs");
+			if (s) return { docs:JSON.parse(s).filter(d=>d && d.fsm && Array.isArray(d.fsm.states)), active:parseInt(localStorage.getItem("fsm-tool-active"))||0 };
+			const old=localStorage.getItem("fsm-tool-project");     // the single-machine version
+			if (old) return { docs:[{ fsm:this.fromJSON(old), input:localStorage.getItem("fsm-tool-input")||"" }], active:0 };
+		} catch(e) {}
+		return { docs:[], active:0 };
+	},
 
 	load(f) {
 		this.fsm=f;
@@ -53,7 +99,7 @@ const Fsm = {
 	changed(what) {
 		this.version++;
 		this.listeners.forEach(l=>{ try { l(what); } catch(e) { console.error(e); } });
-		try { localStorage.setItem("fsm-tool-project",this.toJSON()); } catch(e) {}
+		this.persist();
 	},
 	edit(label,fn) {
 		const before=JSON.stringify(this.fsm);
@@ -157,41 +203,48 @@ const Fsm = {
 };
 
 /* ------------------------------------------------------------------ */
-/* examples                                                            */
+/* examples: every *.fsm.json file in the examples/ directory          */
 /* ------------------------------------------------------------------ */
-function fsmBuild(name,vars,states,trans,initial,initAngle=Math.PI) {
-	const f={ format:"fsm-tool/1", name, vars, initAngle, states:[], transitions:[] };
-	const byLabel={};
-	states.forEach(([label,x,y,acc],i)=>{ const s={id:"s"+(i+1),label,x,y,accepting:!!acc}; f.states.push(s); byLabel[label]=s.id; });
-	trans.forEach(([a,b,label,bend,loop],i)=>{
-		const p=Fsm.parseLabel(label);
-		f.transitions.push({ id:"t"+(i+1), from:byLabel[a], to:byLabel[b], event:p.event, guard:p.guard, action:p.action, bend:bend||0, loopAngle:loop!==undefined?loop:-Math.PI/2 });
-	});
-	f.initial=byLabel[initial];
-	return f;
-}
-const FSM_EXAMPLES = [
-	{ name:"Turnstile (coin / push)", input:"coin push push coin coin push", make:()=>fsmBuild("Turnstile","",
-		[["Locked",220,220],["Unlocked",520,220]],
-		[["Locked","Unlocked","coin",40],["Unlocked","Locked","push",40],["Locked","Locked","push",0,-Math.PI/2],["Unlocked","Unlocked","coin",0,-Math.PI/2]],
-		"Locked") },
-	{ name:"Binary numbers divisible by 3", input:"110", make:()=>fsmBuild("Divisible by 3","",
-		[["r0",180,240,true],["r1",400,240],["r2",620,240]],
-		[["r0","r0","0",0,-Math.PI/2],["r0","r1","1",35],["r1","r0","1",35],["r1","r2","0",35],["r2","r1","0",35],["r2","r2","1",0,-Math.PI/2]],
-		"r0") },
-	{ name:"Ends with 'ab'", input:"a b b a a b", make:()=>fsmBuild("Ends with ab","",
-		[["q0",180,260],["q1",400,260],["q2",620,260,true]],
-		[["q0","q0","b",0,-Math.PI/2],["q0","q1","a",0],["q1","q1","a",0,-Math.PI/2],["q1","q2","b",35],["q2","q1","a",35],["q2","q0","b",-90]],
-		"q0") },
-	{ name:"Coffee machine (guards)", input:"", make:()=>fsmBuild("Coffee machine","credit := 0",
-		[["Idle",180,250],["Paying",460,250],["Brewing",740,250]],
-		[["Idle","Paying","coin / credit := credit + 100",0],
-		 ["Paying","Paying","coin / credit := credit + 100",0,-Math.PI/2],
-		 ["Paying","Brewing","button [credit >= 200] / credit := credit - 200",35],
-		 ["Paying","Paying","button [credit < 200]",0,Math.PI/2],
-		 ["Brewing","Paying","done [credit > 0]",35],
-		 ["Brewing","Idle","done [credit = 0]",-110]],
-		"Idle") },
-];
+// The file list comes from examples/index.json (generated at deploy time,
+// or locally with  node tools/examples-index.js) and, if the web server shows
+// directory listings (python -m http.server, VS Code Live Server, Apache),
+// also from the listing itself - so a file just dropped in is found too.
+// The menu is ordered by file name; the menu text is the "name" of the machine.
+const Examples = {
+	dir:"examples/",
+	list:[],          // { file, name, text }
+	loaded:false,
+	error:"",
+	async load() {
+		let names=[];
+		try {
+			const r=await fetch(this.dir+"index.json",{cache:"no-cache"});
+			if (r.ok) { const j=await r.json(); if (Array.isArray(j)) names.push(...j.map(String)); }
+		} catch(e) {}
+		try {
+			const r=await fetch(this.dir,{cache:"no-cache"});
+			if (r.ok) {
+				const html=await r.text();
+				for (const m of html.matchAll(/href\s*=\s*["']([^"'?#]+\.fsm\.json)["']/gi)) names.push(decodeURIComponent(m[1].split("/").pop()));
+			}
+		} catch(e) {}
+		names=[...new Set(names.filter(n=>/\.fsm\.json$/i.test(n)))].sort((a,b)=>a.localeCompare(b));
+		const got=await Promise.all(names.map(async file=>{
+			try {
+				const r=await fetch(this.dir+encodeURIComponent(file),{cache:"no-cache"});
+				if (!r.ok) return null;
+				const text=await r.text();
+				const f=Fsm.fromJSON(text);
+				return { file, name:(f.name||file.replace(/\.fsm\.json$/i,"")).trim(), text };
+			} catch(e) { console.warn("example "+file+": "+e.message); return null; }
+		}));
+		this.list=got.filter(Boolean);
+		if (!this.list.length) this.error=location.protocol==="file:" ? "open the tool through a web server to see the examples" : "no *.fsm.json files found in "+this.dir;
+		this.loaded=true;
+		return this.list;
+	},
+	// a fresh copy every time
+	make(ex) { const f=Fsm.fromJSON(ex.text); return { fsm:f, input:f.input||"" }; },
+};
 
-if (typeof module!=="undefined") module.exports={ Fsm, FSM_EXAMPLES, fsmBuild };
+if (typeof module!=="undefined") module.exports={ Fsm, Examples };
