@@ -2,7 +2,8 @@
 //
 // Every machine starts from its initial state and in each step takes an event
 // chosen at random from the events that are possible now (an outgoing transition
-// with that event and a true guard). A machine with no possible event (dead end,
+// with that event and a true guard). Parameterized events, e.g. coin(v), get values
+// that appear in the machine's own input (coin(50) coin(100)), or 1..10. A machine with no possible event (dead end,
 // stuck, error) starts again from its initial state.
 // A small control window: Suspend, Resume, Slower, Faster, Quit.
 "use strict";
@@ -58,7 +59,8 @@ const RandomSim = {
 		if (!s || !Fsm.fsm.states.length) return;
 		if (s.isFinal() || !s.state) { s.reset(""); s.quietEnd=true; s.addLog("restart from the initial state",THEME.textDim); return; }
 		let possible=[];
-		try { possible=Fsm.alphabet().filter(ev=>s.possible(ev)); } catch(e) { possible=[]; }
+		// parameter values: the ones in the machine's own input, or small random integers
+		try { possible=s.possibleTokens(this.saved.get(d)||""); } catch(e) { possible=[]; }
 		if (!possible.length) {
 			s.addLog("dead end in "+s.stateLabel(s.state)+" (no possible event) – restart",THEME.textDim);
 			s.status="stuck";      // shown red for one step, then restart

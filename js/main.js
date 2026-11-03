@@ -126,6 +126,8 @@ helpmenu.add("Usage…",()=>WM.message("Usage",[
 	"",
 	"TRANSITION LABEL:   event [guard] / action",
 	"  coin          a, b          button [credit >= 200] / credit := credit - 200",
+	"  coin(v) [credit < 1000] / credit += v      (an event with a parameter)",
+	"     input:  coin(50) coin(100)     actions:  x := e,  x += e,  x -= e,  x *= e,  x++",
 	"  variables are declared in Properties (nothing selected):  credit := 0",
 	"",
 	"SEVERAL MACHINES",

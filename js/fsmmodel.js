@@ -7,6 +7,8 @@
 // A transition label is written like in UML / statecharts:
 //      event [guard] / action          e.g.   coin [credit < 200] / credit := credit + 100
 // "event" may list several events: "a, b". guard and action are optional.
+// An event may have parameters:  coin(v) [credit < 1000] / credit += v
+//   the input then gives the values:  coin(50) coin(100)
 // guard: boolean expression over the variables (expr.js), action: statements "x := e; y++"
 "use strict";
 
@@ -140,7 +142,23 @@ const Fsm = {
 	state(id,f=this.fsm) { return f.states.find(s=>s.id===id)||null; },
 	trans(id) { return this.fsm.transitions.find(t=>t.id===id)||null; },
 	stateByLabel(label) { const l=String(label).trim().toLowerCase(); return this.fsm.states.find(s=>s.label.trim().toLowerCase()===l)||null; },
-	events(t) { return String(t.event).split(/[,;]/).map(e=>e.trim()).filter(e=>e!==""); },
+	// "coin(v), push"  ->  [{name:"coin", params:["v"]}, {name:"push", params:[]}]
+	// the parameters are local variables of the guard and the action of that transition
+	eventSpecs(t) {
+		return Expr.splitTop(String(t.event||""),",;").map(e=>{
+			const m=e.match(/^([^()\s]+)\s*(?:\(([^()]*)\))?$/);
+			if (!m) return { name:e.trim(), params:[] };
+			return { name:m[1], params:m[2]!==undefined ? m[2].split(",").map(x=>x.trim().toLowerCase()).filter(x=>x!=="") : [] };
+		});
+	},
+	events(t) { return this.eventSpecs(t).map(e=>e.name); },
+	// the formal parameters of an event (from the first transition that declares them)
+	eventParams(name) {
+		for (const t of this.fsm.transitions) for (const e of this.eventSpecs(t)) if (e.name===name && e.params.length) return e.params;
+		return [];
+	},
+	// "coin(v)" for the event buttons
+	eventCaption(name) { const p=this.eventParams(name); return p.length ? name+"("+p.join(", ")+")" : name; },
 	// all events used on transitions (the input alphabet), in order of appearance
 	alphabet() {
 		const out=[];

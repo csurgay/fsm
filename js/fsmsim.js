@@ -17,10 +17,26 @@ class FsmSim {
 	on(f) { this.listeners.push(f); }
 	emit(ev) { this.listeners.forEach(f=>{ try { f(ev,this); } catch(e) { console.error(e); } }); }
 
+	// "coin(50) push, coin (20)"  ->  ["coin(50)", "push", "coin(20)"]
 	tokenize(text) {
 		const s=String(text).trim();
 		if (!s) return [];
-		if (/[\s,;]/.test(s)) return s.split(/[\s,;]+/).filter(x=>x!=="");
+		if (/[\s,;()]/.test(s)) {
+			const out=[]; let cur="", depth=0, q=null;
+			for (const ch of s) {
+				if (q) { cur+=ch; if (ch===q) q=null; continue; }
+				if (ch==='"'||ch==="'") { q=ch; cur+=ch; continue; }
+				if (ch==="(") {
+					depth++;
+					if (!cur && out.length && depth===1) cur=out.pop();     // "coin (20)"
+				}
+				if (ch===")") depth=Math.max(0,depth-1);
+				if (depth===0 && /[\s,;]/.test(ch)) { if (cur) out.push(cur); cur=""; continue; }
+				cur+=ch;
+			}
+			if (cur) out.push(cur);
+			return out.map(t=>t.replace(/\s*\(\s*/,"(").replace(/\s*\)$/,")"));
+		}
 		const alpha=Fsm.alphabet();
 		if (alpha.includes(s)) return [s];
 		return s.split("");                  // "abba" -> a b b a
@@ -44,10 +60,29 @@ class FsmSim {
 		if (!this.state && Fsm.fsm && Fsm.fsm.states.length) { this.status="error"; this.msg="no initial state"; }
 		this.emit({type:"reset"});
 	}
-	scope() {
+	// "coin(50, x+1)"  ->  {name:"coin", args:[50, ...], text}
+	parseToken(tok) {
+		const m=String(tok).match(/^([^()\s]+)\s*\(([\s\S]*)\)$/);
+		if (!m) return { name:String(tok), args:[], text:String(tok) };
+		const args=Expr.splitTop(m[2],",").map(a=>Expr.evaluate(Expr.parse(a),this.scope()));
+		return { name:m[1], args, text:m[1]+"("+args.map(valText).join(", ")+")" };
+	}
+	// the parameters of transition t bound to the actual values of the event
+	bind(t,ev) {
+		const spec=Fsm.eventSpecs(t).find(e=>e.name===ev.name);
+		const loc={};
+		if (!spec || !spec.params.length) return loc;
+		if (ev.args.length<spec.params.length)
+			throw new SdlError("'"+ev.name+"' needs "+spec.params.length+" parameter(s): "+ev.name+"("+spec.params.join(", ")+")");
+		spec.params.forEach((p,i)=>{ loc[p]=ev.args[i]; });
+		return loc;
+	}
+	scope(loc) {
 		const v=this.vars;
 		return {
-			get(name,raw) { if (Object.prototype.hasOwnProperty.call(v,name)) return v[name]; throw new SdlError("undefined variable '"+(raw||name)+"' (declare it in Variables)"); },
+			get(name,raw) {
+				if (loc && Object.prototype.hasOwnProperty.call(loc,name)) return loc[name];
+				if (Object.prototype.hasOwnProperty.call(v,name)) return v[name]; throw new SdlError("undefined variable '"+(raw||name)+"' (declare it in Variables)"); },
 			call(name,args) {
 				switch (name) {
 					case "random": { const a=Math.ceil(args[0]), b=Math.floor(args.length>1?args[1]:args[0]); return a+Math.floor(Math.random()*(b-a+1)); }
@@ -61,16 +96,52 @@ class FsmSim {
 	}
 	stateLabel(id) { const s=Fsm.state(id); return s?s.label.replace(/\n/g," "):"?"; }
 	// transitions leaving the active state for this event (guards not yet checked)
+	// ev: an event name, or a token like "coin(50)"
 	candidates(ev) {
-		return Fsm.fsm.transitions.filter(t=>t.from===this.state && Fsm.events(t).includes(ev));
+		const name=typeof ev==="string" ? this.parseToken(ev).name : ev.name;
+		return Fsm.fsm.transitions.filter(t=>t.from===this.state && Fsm.events(t).includes(name));
 	}
-	guardOk(t) {
+	guardOk(t,loc) {
 		if (!t.guard || !t.guard.trim()) return true;
-		return Expr.truthy(Expr.evaluate(Expr.parse(t.guard),this.scope()));
+		return Expr.truthy(Expr.evaluate(Expr.parse(t.guard),this.scope(loc)));
 	}
-	enabled(ev) { return this.candidates(ev).filter(t=>this.guardOk(t)); }
+	enabled(ev) {
+		if (typeof ev==="string") ev=this.parseToken(ev);
+		return this.candidates(ev).filter(t=>this.guardOk(t,this.bind(t,ev)));
+	}
 	// is the event possible now? (for the event buttons)
-	possible(ev) { try { return !!this.state && this.enabled(ev).length>0; } catch(e) { return false; } }
+	// without values a parameterized event counts as possible if it has a transition here
+	possible(ev) {
+		try {
+			if (!this.state) return false;
+			const tok=this.parseToken(ev);
+			if (tok.text===tok.name && Fsm.eventParams(tok.name).length) return this.candidates(tok).length>0;
+			return this.enabled(tok).length>0;
+		} catch(e) { return false; }
+	}
+	// all events (with values) that could fire now - for the random simulation.
+	// The values of a parameterized event come from samples (e.g. the machine's own
+	// input: "coin(50) coin(100)"), otherwise small random integers.
+	possibleTokens(samples="") {
+		const out=[];
+		if (!this.state) return out;
+		const seen={};
+		this.tokenize(samples).forEach(t=>{ try { const p=this.parseToken(t); if (p.args.length) (seen[p.name]=seen[p.name]||[]).push(p.args); } catch(e) {} });
+		Fsm.alphabet().forEach(name=>{
+			const params=Fsm.eventParams(name);
+			if (!params.length) { if (this.possible(name)) out.push(name); return; }
+			if (!this.candidates(name).length) return;
+			const tuples=(seen[name]||[]).slice();
+			if (!tuples.length) for (let i=0;i<6;i++) tuples.push(params.map(()=>1+Math.floor(Math.random()*10)));
+			const ok=new Set();
+			tuples.forEach(a=>{
+				const tok=name+"("+a.map(valText).join(", ")+")";
+				try { if (this.enabled(tok).length) ok.add(tok); } catch(e) {}
+			});
+			out.push(...ok);
+		});
+		return out;
+	}
 	next() { return this.pos<this.tokens.length ? this.tokens[this.pos] : null; }
 	nextTransition() {
 		const ev=this.next();
@@ -95,9 +166,9 @@ class FsmSim {
 		if (this.isFinal() || !this.state) return false;
 		const snap=this.snapshot();
 		if (manual) snap.ntok--;          // the token was appended just for this step
-		let en;
-		try { en=this.enabled(ev); }
-		catch(e) { this.status="error"; this.msg="guard: "+e.message; this.failed=this.pos; this.addLog(this.msg,"#c01818"); this.emit({type:"error"}); return false; }
+		let en, tok;
+		try { tok=this.parseToken(ev); ev=tok.text; en=this.enabled(tok); }
+		catch(e) { this.status="error"; this.msg=(/needs \d+ parameter/.test(e.message)?"":tok?"guard: ":"event: ")+e.message; this.failed=this.pos; this.addLog(this.msg,"#c01818"); this.emit({type:"error"}); return false; }
 		if (!en.length && this.ignoreUnhandled) {
 			this.history.push(snap);
 			this.pos++;
@@ -118,11 +189,13 @@ class FsmSim {
 		}
 		const t=en[0];
 		try {
+			const loc=this.bind(t,tok);                  // the event parameters: local variables
+			const store=(name,v)=>{ if (Object.prototype.hasOwnProperty.call(loc,name)) loc[name]=v; else this.vars[name]=v; };
 			if (t.action && t.action.trim()) Expr.parseStatements(t.action).forEach(st=>{
 				switch (st.k) {
-					case "assign": this.vars[st.name]=Expr.evaluate(st.e,this.scope()); break;
-					case "inc": { const v=this.scope().get(st.name,st.name); this.vars[st.name]=v+st.d; break; }
-					case "expr": Expr.evaluate(st.e,this.scope()); break;
+					case "assign": store(st.name,Expr.evaluate(st.e,this.scope(loc))); break;
+					case "inc": { const v=this.scope(loc).get(st.name,st.name); store(st.name,v+st.d); break; }
+					case "expr": Expr.evaluate(st.e,this.scope(loc)); break;
 					default: throw new SdlError("timers are not supported here");
 				}
 			});
@@ -166,4 +239,7 @@ class FsmSim {
 	}
 }
 
-if (typeof module!=="undefined") module.exports={ FsmSim };
+// a value as it is written in an event: 50, "abc"
+function valText(v) { return typeof v==="string" ? '"'+v+'"' : Expr.toText(v); }
+
+if (typeof module!=="undefined") module.exports={ FsmSim, valText };

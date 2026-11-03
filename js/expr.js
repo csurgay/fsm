@@ -3,7 +3,8 @@
 // Expressions:  numbers, "strings", true/false, identifiers, f(args),
 //               + - * / mod rem, = == /= != < > <= >=, and or not (also && || !), ( )
 // Statements (task symbol, separated by ; or newline):
-//               x := expr   x = expr   x++   x--   set(now+5, T)   reset(T)
+//               x := expr   x = expr   x += expr   x -= expr   x *= expr
+//               x++   x--   set(now+5, T)   reset(T)
 // Signals:      NAME(arg1, arg2) to target          (output)
 //               NAME(param1, param2)                (input)
 // Identifiers and signal names are case-insensitive (like SDL).
@@ -190,6 +191,11 @@ const Expr = (()=>{
 		return splitTop(src,";\n").map(st=>{
 			let m;
 			if ((m=st.match(/^([A-Za-z_]\w*)\s*(\+\+|--)$/))) return {k:"inc",name:m[1].toLowerCase(),d:m[2]==="++"?1:-1};
+			// x += e   x -= e   x *= e   ->   x := x + e ...
+			if ((m=st.match(/^([A-Za-z_]\w*)\s*([+\-*])=\s*([\s\S]+)$/))) {
+				const name=m[1].toLowerCase();
+				return {k:"assign",name,e:{k:"bin",op:m[2],l:{k:"id",name,raw:m[1]},r:parse(m[3])}};
+			}
 			if ((m=st.match(/^([A-Za-z_]\w*)\s*(:=|=)(?!=)\s*([\s\S]+)$/))) return {k:"assign",name:m[1].toLowerCase(),e:parse(m[3])};
 			if ((m=st.match(/^set\s*\(([\s\S]*)\)$/i))) {
 				const a=splitTop(m[1],",");

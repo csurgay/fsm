@@ -133,16 +133,27 @@ class EventBar extends Area {
 	constructor() { super(0,0,10,30); this.class="EventBar"; this.key=null; }
 	rebuild() {
 		const alpha=Fsm.fsm?Fsm.alphabet():[];
-		const key=alpha.join("\u0001")+"|"+this.w;
+		const key=alpha.map(e=>Fsm.eventCaption(e)).join("\u0001")+"|"+this.w;
 		if (key===this.key) return;
 		this.key=key;
 		this.children.slice().forEach(ch=>this.remove(ch));
 		let x=0, y=0;
 		alpha.forEach(ev=>{
-			const b=new Button(ev,0,0,0,24,()=>FsmCtl.manual(ev),{
+			const params=Fsm.eventParams(ev);
+			// a parameterized event asks for its values:  coin(v)  ->  v = 50
+			const fire=()=>{
+				if (!params.length) { FsmCtl.manual(ev); return; }
+				const last=this.lastArgs&&this.lastArgs[ev]||"";
+				WM.prompt("Event "+Fsm.eventCaption(ev),params.join(", ")+"  =",last,(v)=>{
+					if (!String(v).trim()) return;
+					(this.lastArgs=this.lastArgs||{})[ev]=v;
+					FsmCtl.manual(ev+"("+v+")");
+				});
+			};
+			const b=new Button(Fsm.eventCaption(ev),0,0,0,24,fire,{
 				enabled:()=>!!FsmCtl.sim && !(typeof RandomSim!=="undefined" && RandomSim.on) && FsmCtl.inputText().trim()==="" && !FsmCtl.sim.isFinal() && !(WM.editing && WM.editing.owner===FsmCtl.win.inputField),
 				toggled:()=>b.isEnabled() && FsmCtl.sim.possible(ev),
-				tooltip:"fire '"+ev+"'  (only when the input box is empty)",
+				tooltip:"fire '"+ev+"'"+(params.length?" – asks for "+params.join(", "):"")+"  (only when the input box is empty)",
 			});
 			b.w=Math.max(40,b.w);
 			if (x>0 && x+b.w>this.w) { x=0; y+=28; }
@@ -262,7 +273,8 @@ class PropsWindow extends Window {
 			this.push(new Label(()=>"Alphabet: { "+Fsm.alphabet().join(", ")+" }",8,y,W-16,18)); y+=26;
 			hint("Transition label:   event [guard] / action");
 			hint("  guard: condition over the variables, e.g.  n < 3");
-			hint("  action: statements, e.g.  n := n + 1;  m++");
+			hint("  action: statements, e.g.  n := n + 1;  m++;  credit += 100");
+			hint("  parameter:  coin(v) [credit < 1000] / credit += v,  input: coin(50)");
 		}
 		else if (key.startsWith("state:")) {
 			const id=view.sel.id, st=()=>Fsm.state(id);
@@ -278,7 +290,7 @@ class PropsWindow extends Window {
 		else if (key.startsWith("trans:")) {
 			const id=view.sel.id, tr=()=>Fsm.trans(id);
 			this.push(new Label(()=>{ const t=tr(); return t?"Transition   "+Fsm.state(t.from).label.replace(/\n/g," ")+"  →  "+Fsm.state(t.to).label.replace(/\n/g," "):""; },8,y,W-16,20,{font:THEME.fontBold})); y+=26;
-			field("Event:",()=>tr()?tr().event:"",(v)=>{ tr().event=v.trim(); },"e.g.  coin   or   a, b");
+			field("Event:",()=>tr()?tr().event:"",(v)=>{ tr().event=v.trim(); },"e.g.  coin   or   a, b   or   coin(v)");
 			field("Guard:",()=>tr()?tr().guard:"",(v)=>{ const g=v.trim(); if (g) Expr.parse(g); tr().guard=g; },"optional, e.g.  credit >= 200");
 			field("Action:",()=>tr()?tr().action:"",(v)=>{ const a=v.trim(); if (a) Expr.parseStatements(a); tr().action=a; },"optional, e.g.  credit := credit - 200");
 			buttons([
